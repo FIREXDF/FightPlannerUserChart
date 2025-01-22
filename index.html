@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Version Usage Statistics</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #121212; /* Dark background */
+            color: #e0e0e0; /* Light text color */
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #1e1e1e; /* Dark container background */
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        canvas {
+            max-width: 100%;
+        }
+        h1 {
+            color: #ffffff;
+        }
+        .buttons {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        .button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+        }
+        .button.dark {
+            background-color: #4e73df;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>FightPlanner Users Version</h1>
+        <div class="buttons">
+            <button id="refreshChart" class="button dark">Refresh</button>
+            <button id="exportChart" class="button dark">Export as PNG</button>
+            <button id="copyChart" class="button dark">Copy to Clipboard</button>
+            <button id="changeChartType" class="button dark">Change Chart Type</button>
+        </div>
+        <canvas id="versionChart"></canvas>
+    </div>
+
+    <script>
+        let versionChart;
+        let currentChartType = 'bar'; // Default chart type
+
+        // Function to generate random color in HEX format
+        function randomColor() {
+            const letters = '0123456789ABCDEF';
+            let color = '#';
+            for (let i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
+        }
+
+        // Fetch version statistics from the server
+        async function fetchVersionStats() {
+            try {
+                const response = await fetch('http://35.239.239.102:3009/get-version-stats');
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('Error fetching version stats:', error);
+            }
+        }
+
+        // Render the chart using Chart.js
+        async function renderChart() {
+            const stats = await fetchVersionStats();
+
+            if (!stats || stats.length === 0) {
+                alert('No data available');
+                return;
+            }
+
+            const versions = stats.map(item => item.version);
+            const userCounts = stats.map(item => item.user_count);
+
+            // Generate random colors for each dataset item
+            const backgroundColors = userCounts.map(() => randomColor());
+            const borderColors = userCounts.map(() => randomColor());
+
+            const ctx = document.getElementById('versionChart').getContext('2d');
+
+            if (versionChart) {
+                versionChart.destroy(); // Destroy the old chart before creating a new one
+            }
+
+            versionChart = new Chart(ctx, {
+                type: currentChartType, // Use current chart type
+                data: {
+                    labels: versions,
+                    datasets: [{
+                        label: 'Users per Version',
+                        data: userCounts,
+                        backgroundColor: backgroundColors, // Use random colors for the bars/segments
+                        borderColor: borderColors, // Use random border colors for the bars/segments
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#e0e0e0'
+                            }
+                        },
+                        datalabels: {
+                            color: '#e0e0e0',
+                            anchor: 'end',
+                            align: 'end',
+                            formatter: (value, context) => value
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                color: '#e0e0e0'
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                color: '#e0e0e0'
+                            },
+                            beginAtZero: true
+                        }
+                    }
+                },
+                plugins: [ChartDataLabels] // Enable the datalabels plugin
+            });
+        }
+
+        // Prepare a temporary canvas with the chart, title, date, and time
+        function prepareCanvasWithChart() {
+            const originalCanvas = document.getElementById('versionChart');
+            const tempCanvas = document.createElement('canvas');
+            const ctx = tempCanvas.getContext('2d');
+
+            const originalWidth = originalCanvas.width;
+            const originalHeight = originalCanvas.height;
+
+            // Resize the temporary canvas to accommodate title, date, and time
+            tempCanvas.width = originalWidth;
+            tempCanvas.height = originalHeight + 60;
+
+            // Draw background
+            ctx.fillStyle = '#121212';
+            ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+            // Get the current date and time
+            const now = new Date();
+            const date = now.toLocaleDateString();
+            const time = now.toLocaleTimeString();
+
+            // Draw title, date, and time
+            ctx.fillStyle = '#e0e0e0';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('FightPlanner Users Version', tempCanvas.width / 2, 30);
+            ctx.font = '16px Arial';
+            ctx.fillText(`Date: ${date} | Time: ${time}`, tempCanvas.width / 2, 50);
+
+            // Draw the original chart on the temporary canvas
+            ctx.drawImage(originalCanvas, 0, 60);
+
+            return tempCanvas;
+        }
+
+        // Export the chart as PNG
+        function exportChart() {
+            const tempCanvas = prepareCanvasWithChart();
+
+            // Create a download link for the PNG
+            const link = document.createElement('a');
+            link.download = `version-stats-${new Date().toLocaleDateString().replace(/\//g, '-')}.png`;
+            link.href = tempCanvas.toDataURL('image/png');
+            link.click();
+        }
+
+        // Copy the chart as PNG to clipboard
+        async function copyChart() {
+            const tempCanvas = prepareCanvasWithChart();
+
+            try {
+                const blob = await new Promise(resolve => tempCanvas.toBlob(resolve, 'image/png'));
+                await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+                alert('Chart copied to clipboard!');
+            } catch (error) {
+                console.error('Failed to copy chart:', error);
+                alert('Failed to copy chart. Try again.');
+            }
+        }
+
+        // Change chart type when the button is clicked
+        function changeChartType() {
+            const chartTypes = ['bar', 'line', 'pie']; // Define available chart types
+            const currentIndex = chartTypes.indexOf(currentChartType);
+            currentChartType = chartTypes[(currentIndex + 1) % chartTypes.length]; // Cycle through chart types
+            renderChart(); // Re-render the chart with the new type
+        }
+
+        // Event listeners
+        document.getElementById('refreshChart').addEventListener('click', renderChart);
+        document.getElementById('exportChart').addEventListener('click', exportChart);
+        document.getElementById('copyChart').addEventListener('click', copyChart);
+        document.getElementById('changeChartType').addEventListener('click', changeChartType);
+
+        // Render the chart when the page loads
+        renderChart();
+    </script>
+</body>
+</html>
